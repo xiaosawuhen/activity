@@ -1,0 +1,334 @@
+使用Activiti提供的API完成流程操作
+一、部署流程定义
+
+	1，在工程项目下创建源码文件夹process
+	
+	2，在该文件下下面新创建一个工作流流程定义文件MyProcess.bpmn
+	
+	3，在MyProcess.bpmn文件定义报销流程
+	
+	4，代码
+	
+	/**
+		 * 1.部署流程定义 会在三张表中产生数据： 
+		 * act_ge_bytearray 产生两条数据  
+		 * act_re_deployment 产生一条数据
+		 * act_re_procdef 
+		 * 产生一条数据 方式一：读取单个的流程定义文件 
+		 * 方式二：读取zip压缩文件
+		 */
+		@Test
+		public void deploy() {
+			String resource = "activiti-context.xml";// 配置文件名称
+			String beanName = "processEngineConfiguration";// 配置id值
+			ProcessEngineConfiguration conf = ProcessEngineConfiguration
+					.createProcessEngineConfigurationFromResource(resource,
+							beanName);
+			ProcessEngine processEngine = conf.buildProcessEngine();
+			// 获取仓库服务并创建发布配置对象
+			DeploymentBuilder deploymentBuilder = processEngine.getRepositoryService().createDeployment();
+	//		// 方式一：设置发布信息
+	//		deploymentBuilder.name("报销流程部署");// 添加部署规则的名称
+	//		// 读取单个的流程定义文件
+	//		deploymentBuilder.addClasspathResource("MyProcess.bpmn");
+	//		// 添加规则图片 不添加会自动产生一个图片不推荐
+	//		deploymentBuilder.addClasspathResource("MyProcess.png");
+	//		Deployment deployment = deploymentBuilder.deploy();
+	
+			// 方式二：读取zip压缩文件
+			deploymentBuilder.name("报销流程部署");// 添加部署规则的名称
+			ZipInputStream zipInputStream = new ZipInputStream(this.getClass()
+					 .getClassLoader().getResourceAsStream("bin.zip"));
+			deploymentBuilder.addZipInputStream(zipInputStream); Deployment
+			deployment =deploymentBuilder.deploy();
+			 
+		}
+部署流程定义步骤：
+
+　　1) 首先获得流程引擎processEngine()
+
+　　2) 通过流程引擎获取了一个RepositoryService对象也就是仓库服务对象
+
+　　3) 由仓库的服务对象创建一个部署对象配置对象，用来封装部署环境的相关配置。
+
+　　4) 这是一个链式编程，在部署配置对象中设置显示名，上传规则文件相对classpath的地址。
+
+　　5) 部署，也是往数据库中存储流程定义的过程。
+
+　　6) 这一步在数据库中将操作三张表：
+
+　　　　a) act_re_deployment
+
+　　　　 存放流程定义的显示名和部署时间，每部署一次增加一条记录
+
+　　　　b) act_re_procdef
+
+　　　　 存放流程定义的属性信息，部署每个新的流程定义都会在这张表中增加一条记录。
+
+　　　　c) act_ge_bytearray
+
+　　　　 存储流程定义相关的部署信息。即流程定义文档的存放地。每部署一次就会增加两条记录，一条是关于bpmn规则文件的，一条是图片的（如果部署时只指定了bpmn一个文件，activiti会在部署时解析bpmn文件内容自动生成流程图）。两个文件不是很大，都是以二进制形式存储在数据库中。
+
+二、查询流程定义
+
+@Test
+	public void queryProcessDefinition() {
+		String resource = "activiti-context.xml";// 配置文件名称
+		String beanName = "processEngineConfiguration";// 配置id值
+		ProcessEngineConfiguration conf = ProcessEngineConfiguration
+				.createProcessEngineConfigurationFromResource(resource,
+						beanName);
+		ProcessEngine processEngine = conf.buildProcessEngine();
+		// 流程定义查询对象,用于查询表act_re_procdef，添加条件查询
+		ProcessDefinitionQuery query = processEngine.getRepositoryService()
+				.createProcessDefinitionQuery();
+		// 添加过滤条件
+		query.processDefinitionKey("process");
+		// 添加排序条件降序排序
+		query.orderByProcessDefinitionVersion().desc();
+		// 添加分页查询
+		query.listPage(0, 10);
+		List<ProcessDefinition> list = query.list();
+		for (ProcessDefinition pd : list) {
+			System.out.println(pd.getName() + "" + pd.getId());
+		}
+	}
+流程定义查询步骤：
+
+　1) 因为流程定义的信息存放在仓库中，所以应该获取RepositoryService。
+
+　2) 创建流程定义查询对象，可以在ProcessDefinitionQuery上设置查询过滤参数
+
+　3) 调用ProcessDefinitionQuery对象的list方法，执行查询，获得符合条件的流程定义列表
+
+　4) 由运行结果可以看出：
+
+　　　a) Key和Name的值为：bpmn文件process节点的id和name的属性值
+
+　　　b) key属性被用来区别不同的流程定义。
+
+　　　c) 带有特定key的流程定义第一次部署时，version为1。之后每次部署都会在当前最高版本号上加1
+
+　 d) Id的值的生成规则为:{processDefinitionKey}:{processDefinitionVersion}:{generated-id},这里的generated-id是一个自动生成的唯一的数字
+
+　　　e) 重复部署一次，deploymentId的值以一定的形式变化
+
+三、删除流程定义
+
+/** 
+	  * 删除流程定义(通过删除部署信息达到删除流程定义的目的) 
+	  * 删除act_re_procdef和act_re_deployment表中的一条记录 
+	  */ 
+	@Test
+	public void delDeployment() throws Exception {
+		String resource = "activiti-context.xml";// 配置文件名称
+		String beanName = "processEngineConfiguration";// 配置id值
+		ProcessEngineConfiguration conf = ProcessEngineConfiguration
+				.createProcessEngineConfigurationFromResource(resource,
+						beanName);
+		ProcessEngine processEngine = conf.buildProcessEngine();
+		// 获取仓库服务对象
+		RepositoryService repositoryService = processEngine
+				.getRepositoryService();
+		// 删除发布信息
+		String deploymentId = "2501";
+		// 普通删除，如果当前规则下有正在执行的流程，则抛异常
+		//repositoryService.deleteDeployment(deploymentId);
+		// 级联删除,会删除和当前规则相关的所有信息，包括历史
+		repositoryService.deleteDeployment(deploymentId, true);
+	}
+四、启动流程实例
+
+根据一个流程定义具体的一次执行过程就是一个流程实例,一个流程定义对应多个流程实例(一对多关系)。
+
+	/**
+	 * 启动一次流程实例act_ru_execution表增加一条数据
+	 */
+	@Test
+	public void startProcessInstance() {
+		String resource = "activiti-context.xml";// 配置文件名称
+		String beanName = "processEngineConfiguration";// 配置id值
+		ProcessEngineConfiguration conf = ProcessEngineConfiguration
+				.createProcessEngineConfigurationFromResource(resource,
+						beanName);
+		ProcessEngine processEngine = conf.buildProcessEngine();
+		// 自动选择最新版本的流程定义启动流程实例建议使用key来启动
+		String processDefinitionKey = "process";
+		ProcessInstance processInstance = processEngine.getRuntimeService()
+				.startProcessInstanceByKey(processDefinitionKey);
+		System.out.println(processInstance.getId());
+	}
+五、查询流程实例列表
+
+	/**
+	 * 查询流程实例列表,查询act_ru_execution表
+	 */
+	@Test
+	public void queryProcessInstance() {
+		String resource = "activiti-context.xml";// 配置文件名称
+		String beanName = "processEngineConfiguration";// 配置id值
+		ProcessEngineConfiguration conf = ProcessEngineConfiguration
+				.createProcessEngineConfigurationFromResource(resource,
+						beanName);
+		ProcessEngine processEngine = conf.buildProcessEngine();
+		// 流程实例查询对象，查询act_ru_execution表
+		ProcessInstanceQuery query = processEngine.getRuntimeService()
+				.createProcessInstanceQuery();
+		query.processDefinitionKey("process");
+		query.orderByProcessInstanceId().desc();
+		query.listPage(0, 2);
+		List<ProcessInstance> list = query.list();
+		for (ProcessInstance pi : list) {
+			System.out.println(pi.getId() + " " + pi.getActivityId());
+		}
+	}
+六、结束流程实例
+
+	/**
+	 * 结束流程实例,操作的表 执行表：act_ru_execution（删除一条数据） 任务表 act_ru_task（删除一条数据）
+	 */
+	@Test
+	public void deleteProcessInstance() {
+		String resource = "activiti-context.xml";// 配置文件名称
+		String beanName = "processEngineConfiguration";// 配置id值
+		ProcessEngineConfiguration conf = ProcessEngineConfiguration
+				.createProcessEngineConfigurationFromResource(resource,
+						beanName);
+		ProcessEngine processEngine = conf.buildProcessEngine();
+		String processInstanceId = "1601";
+		processEngine.getRuntimeService().deleteProcessInstance(
+				processInstanceId, "我愿意");
+	}
+七、查询部署信息
+
+	/**
+	 * 查询部署列表(同一个流程定义因为修改会进行多次的部署，版本号不一样version会增加，每次部署act_re_deployment表增加一条记录)
+	 */
+	@Test
+	public void queryDeployment() {
+		String resource = "activiti-context.xml";// 配置文件名称
+		String beanName = "processEngineConfiguration";// 配置id值
+		ProcessEngineConfiguration conf = ProcessEngineConfiguration
+				.createProcessEngineConfigurationFromResource(resource,
+						beanName);
+		ProcessEngine processEngine = conf.buildProcessEngine();
+		// 部署查询对象，查询表act_re_deployment
+		DeploymentQuery query = processEngine.getRepositoryService()
+				.createDeploymentQuery();
+		List<Deployment> list = query.list();
+		for (Deployment deployment : list) {
+			String id = deployment.getId();
+			System.out.println(id);
+		}
+	}
+八、删除部署信息
+
+	/**
+	 * 删除部署信息，删除act_re_procdef和act_re_deployment表中的一条记录
+	 */
+	@Test
+	public void deleteDeployment() {
+		String resource = "activiti-context.xml";// 配置文件名称
+		String beanName = "processEngineConfiguration";// 配置id值
+		ProcessEngineConfiguration conf = ProcessEngineConfiguration
+				.createProcessEngineConfigurationFromResource(resource,
+						beanName);
+		ProcessEngine processEngine = conf.buildProcessEngine();
+		String deploymentId = "5001";
+		processEngine.getRepositoryService().deleteDeployment(deploymentId,
+				true);
+	}
+九、查询一次流程部署对应的文件名称(bpmn,png)和输入流
+
+	/**
+	 * 获得png文件的输入流
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public void getPng() throws Exception {
+		String resource = "activiti-context.xml";// 配置文件名称
+		String beanName = "processEngineConfiguration";// 配置id值
+		ProcessEngineConfiguration conf = ProcessEngineConfiguration
+				.createProcessEngineConfigurationFromResource(resource,
+						beanName);
+		ProcessEngine processEngine = conf.buildProcessEngine();
+		String processDefinitionId = "process:3:5004";
+		InputStream pngInputStream = processEngine.getRepositoryService()
+				.getProcessDiagram(processDefinitionId);
+		FileUtils.copyInputStreamToFile(pngInputStream, new File("d:\\my.png"));
+	}
+十、获取流程定义图标(png文件)
+
+	/**
+	 * 获得png文件的输入流
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public void getPng() throws Exception {
+		String resource = "activiti-context.xml";// 配置文件名称
+		String beanName = "processEngineConfiguration";// 配置id值
+		ProcessEngineConfiguration conf = ProcessEngineConfiguration
+				.createProcessEngineConfigurationFromResource(resource,
+						beanName);
+		ProcessEngine processEngine = conf.buildProcessEngine();
+		String processDefinitionId = "process:3:5004";
+		InputStream pngInputStream = processEngine.getRepositoryService()
+				.getProcessDiagram(processDefinitionId);
+		FileUtils.copyInputStreamToFile(pngInputStream, new File("d:\\my.png"));
+	}
+十一、 查询个人任务列表
+
+	/**
+	 * 查询任务列表查询act_ru_task表
+	 */
+	@Test
+	public void queryTask() {
+		String resource = "activiti-context.xml";// 配置文件名称
+		String beanName = "processEngineConfiguration";// 配置id值
+		ProcessEngineConfiguration conf = ProcessEngineConfiguration
+				.createProcessEngineConfigurationFromResource(resource,
+						beanName);
+		ProcessEngine processEngine = conf.buildProcessEngine();
+		TaskQuery query = processEngine.getTaskService().createTaskQuery();
+		String assignee = "zhangsan";
+		query.taskAssignee(assignee);
+		query.orderByTaskCreateTime().desc();
+		List<Task> list = query.list();
+		for (Task task : list) {
+			System.out.println(task.getId() + " " + task.getName());
+		}
+	}
+十二、 办理任务
+
+	/**
+	 * 办理任务
+	 */
+	@Test
+	public void completeTask() {
+		String resource = "activiti-context.xml";// 配置文件名称
+		String beanName = "processEngineConfiguration";// 配置id值
+		ProcessEngineConfiguration conf = ProcessEngineConfiguration
+				.createProcessEngineConfigurationFromResource(resource,
+						beanName);
+		ProcessEngine processEngine = conf.buildProcessEngine();
+		String taskId = "30004";
+		processEngine.getTaskService().complete(taskId);
+	}
+十三、 直接将流程想下执行一步管理员用户拥有该权限
+
+	/**
+	 * 直接将流程向下执行一步act_ru_task表增加一条数据，直接跳过一步
+	 */
+	@Test
+	public void signal() {
+		String resource = "activiti-context.xml";// 配置文件名称
+		String beanName = "processEngineConfiguration";// 配置id值
+		ProcessEngineConfiguration conf = ProcessEngineConfiguration
+				.createProcessEngineConfigurationFromResource(resource,
+						beanName);
+		ProcessEngine processEngine = conf.buildProcessEngine();
+		String executionId = "2701";// 流程实例id
+		processEngine.getRuntimeService().signal(executionId);
+	}

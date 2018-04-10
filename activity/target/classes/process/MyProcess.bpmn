@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:activiti="http://activiti.org/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" typeLanguage="http://www.w3.org/2001/XMLSchema" expressionLanguage="http://www.w3.org/1999/XPath" targetNamespace="http://www.activiti.org/test">
+  <process id="myProcess" name="My process" isExecutable="true">
+    <startEvent id="startevent1" name="Start"></startEvent>
+    <endEvent id="endevent1" name="End"></endEvent>
+    <userTask id="dmapproval" name="【部门经理】审批" activiti:assignee="003"></userTask>
+    <userTask id="gmapproval" name="【总经理】审批" activiti:assignee="001"></userTask>
+    <sequenceFlow id="flow1" sourceRef="startevent1" targetRef="dmapproval"></sequenceFlow>
+    <sequenceFlow id="flow2" name="重要" sourceRef="dmapproval" targetRef="gmapproval">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${message=='important'}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flow3" sourceRef="gmapproval" targetRef="procurement"></sequenceFlow>
+    <sequenceFlow id="flow4" name="不重要" sourceRef="dmapproval" targetRef="procurement">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${message=='unimportant'}]]></conditionExpression>
+    </sequenceFlow>
+    <userTask id="procurement" name="采购"></userTask>
+    <sequenceFlow id="flow5" sourceRef="procurement" targetRef="endevent1"></sequenceFlow>
+  </process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_myProcess">
+    <bpmndi:BPMNPlane bpmnElement="myProcess" id="BPMNPlane_myProcess">
+      <bpmndi:BPMNShape bpmnElement="startevent1" id="BPMNShape_startevent1">
+        <omgdc:Bounds height="35.0" width="35.0" x="305.0" y="70.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="endevent1" id="BPMNShape_endevent1">
+        <omgdc:Bounds height="35.0" width="35.0" x="305.0" y="490.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="dmapproval" id="BPMNShape_dmapproval">
+        <omgdc:Bounds height="56.0" width="121.0" x="262.0" y="180.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="gmapproval" id="BPMNShape_gmapproval">
+        <omgdc:Bounds height="55.0" width="105.0" x="450.0" y="260.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="procurement" id="BPMNShape_procurement">
+        <omgdc:Bounds height="55.0" width="105.0" x="270.0" y="401.0"></omgdc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge bpmnElement="flow1" id="BPMNEdge_flow1">
+        <omgdi:waypoint x="322.0" y="105.0"></omgdi:waypoint>
+        <omgdi:waypoint x="322.0" y="180.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow2" id="BPMNEdge_flow2">
+        <omgdi:waypoint x="322.0" y="236.0"></omgdi:waypoint>
+        <omgdi:waypoint x="502.0" y="260.0"></omgdi:waypoint>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds height="16.0" width="30.0" x="322.0" y="236.0"></omgdc:Bounds>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow3" id="BPMNEdge_flow3">
+        <omgdi:waypoint x="502.0" y="315.0"></omgdi:waypoint>
+        <omgdi:waypoint x="322.0" y="401.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow4" id="BPMNEdge_flow4">
+        <omgdi:waypoint x="322.0" y="236.0"></omgdi:waypoint>
+        <omgdi:waypoint x="322.0" y="401.0"></omgdi:waypoint>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds height="16.0" width="45.0" x="322.0" y="236.0"></omgdc:Bounds>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow5" id="BPMNEdge_flow5">
+        <omgdi:waypoint x="322.0" y="456.0"></omgdi:waypoint>
+        <omgdi:waypoint x="322.0" y="490.0"></omgdi:waypoint>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
